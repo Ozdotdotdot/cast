@@ -24,8 +24,8 @@ func Scan() ([]DiscoveredDevice, error) {
 	entries := make(chan *zeroconf.ServiceEntry)
 	var devices []DiscoveredDevice
 
-	// Scan for 5 seconds
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// Scan for 15 seconds to give slower devices time to respond
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	go func() {
