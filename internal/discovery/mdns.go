@@ -3,7 +3,6 @@ package discovery
 import (
 	"context"
 	"strings"
-	"time"
 
 	"github.com/grandcat/zeroconf"
 )
@@ -14,21 +13,20 @@ type DiscoveredDevice struct {
 	Port int
 }
 
-// Scan searches for Google Home/Chromecast devices on the local network
-func Scan() ([]DiscoveredDevice, error) {
+// Scan searches for Google Home/Chromecast devices on the local network.
+// It returns a channel that emits devices as they are discovered.
+// The channel is closed when the context expires and all entries are drained.
+func Scan(ctx context.Context) (<-chan DiscoveredDevice, error) {
 	resolver, err := zeroconf.NewResolver(nil)
 	if err != nil {
 		return nil, err
 	}
 
 	entries := make(chan *zeroconf.ServiceEntry)
-	var devices []DiscoveredDevice
-
-	// Scan for 15 seconds to give slower devices time to respond
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
+	results := make(chan DiscoveredDevice)
 
 	go func() {
+		defer close(results)
 		for entry := range entries {
 			// Skip entries without IPv4 addresses
 			if len(entry.AddrIPv4) == 0 {
@@ -47,11 +45,11 @@ func Scan() ([]DiscoveredDevice, error) {
 				name = strings.TrimSuffix(name, "._googlecast._tcp.local.")
 			}
 
-			devices = append(devices, DiscoveredDevice{
+			results <- DiscoveredDevice{
 				Name: name,
 				IP:   entry.AddrIPv4[0].String(),
 				Port: entry.Port,
-			})
+			}
 		}
 	}()
 
@@ -61,10 +59,7 @@ func Scan() ([]DiscoveredDevice, error) {
 		return nil, err
 	}
 
-	// Wait for timeout
-	<-ctx.Done()
-
-	return devices, nil
+	return results, nil
 }
 
 // extractFriendlyName looks for "fn=..." in TXT records

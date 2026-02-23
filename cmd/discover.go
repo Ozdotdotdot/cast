@@ -2,10 +2,12 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/Ozdotdotdot/cast/internal/config"
 	"github.com/Ozdotdotdot/cast/internal/discovery"
@@ -36,19 +38,26 @@ func runDiscoveryFlow() ([]discovery.DiscoveredDevice, error) {
 	fmt.Println("Scanning for devices...")
 	fmt.Println()
 
-	devices, err := discovery.Scan()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	ch, err := discovery.Scan(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("discovery failed: %w", err)
+	}
+
+	var devices []discovery.DiscoveredDevice
+	for d := range ch {
+		devices = append(devices, d)
+		fmt.Printf("  Found: %s (%s)\n", d.Name, d.IP)
 	}
 
 	if len(devices) == 0 {
 		return nil, nil
 	}
 
-	fmt.Printf("Found %d device(s):\n", len(devices))
-	for i, d := range devices {
-		fmt.Printf("  %d. %s (%s)\n", i+1, d.Name, d.IP)
-	}
+	fmt.Println()
+	fmt.Printf("Found %d device(s).\n", len(devices))
 	fmt.Println()
 
 	return devices, nil
