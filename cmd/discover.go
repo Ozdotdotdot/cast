@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -94,15 +95,8 @@ func saveDiscoveredDevices(devices []discovery.DiscoveredDevice) (*config.Config
 
 	// Set default device if not set
 	if cfg.DefaultDevice == "" && len(devices) > 0 {
-		defaultName := normalizeName(devices[0].Name)
-		fmt.Printf("Set default device? [%s]: ", defaultName)
-		response, _ = reader.ReadString('\n')
-		response = strings.TrimSpace(response)
-
-		if response == "" {
-			cfg.DefaultDevice = defaultName
-		} else {
-			cfg.DefaultDevice = response
+		if err := chooseDefaultDevice(cfg, devices, reader); err != nil {
+			return nil, err
 		}
 	}
 
@@ -114,6 +108,45 @@ func saveDiscoveredDevices(devices []discovery.DiscoveredDevice) (*config.Config
 	fmt.Printf("Devices saved to %s\n", config.Path())
 
 	return cfg, nil
+}
+
+func chooseDefaultDevice(cfg *config.Config, devices []discovery.DiscoveredDevice, reader *bufio.Reader) error {
+	fmt.Println("Select default speaker:")
+	for i, d := range devices {
+		fmt.Printf("  %d) %s\n", i+1, normalizeName(d.Name))
+	}
+	fmt.Print("Choose [1], 's' to skip, or 'c' for custom: ")
+
+	response, _ := reader.ReadString('\n')
+	response = strings.TrimSpace(strings.ToLower(response))
+
+	if response == "" || response == "1" {
+		cfg.DefaultDevice = normalizeName(devices[0].Name)
+		return nil
+	}
+
+	if response == "s" {
+		return nil
+	}
+
+	if response == "c" {
+		fmt.Print("Enter default device name or alias: ")
+		custom, _ := reader.ReadString('\n')
+		custom = strings.TrimSpace(custom)
+		if custom == "" {
+			return fmt.Errorf("default device cannot be empty")
+		}
+		cfg.DefaultDevice = custom
+		return nil
+	}
+
+	index, err := strconv.Atoi(response)
+	if err != nil || index < 1 || index > len(devices) {
+		return fmt.Errorf("invalid selection: %q", response)
+	}
+
+	cfg.DefaultDevice = normalizeName(devices[index-1].Name)
+	return nil
 }
 
 // normalizeName converts a device name to a CLI-friendly identifier
